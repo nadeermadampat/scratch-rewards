@@ -1,0 +1,42 @@
+# Full stack: PostgreSQL + API + static frontend behind nginx.
+#   cp .env.example .env   (then set the secrets)
+#   docker compose up --build
+#   open http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scratch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-scratch_rewards}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scratch} -d ${POSTGRES_DB:-scratch_rewards}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      # Overrides the SQLite default from .env.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-scratch}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-scratch_rewards}
+      APP_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      # Remove --demo-activity to start without sample participants.
+      SEED_ARGS: --demo-activity
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

@@ -1,0 +1,88 @@
+# Non-sensitive application settings. Secrets belong in `.env`.
+
+scratch_card:
+  expiry_hours: 72          # how long a generated card stays valid
+  reveal_threshold: 0.5     # fraction of the coating scratched before auto-reveal
+  max_cards_per_user: 1     # per campaign
+
+verification:
+  token_ttl_minutes: 15     # lifetime of the one-time token returned by /subscriptions/verify
+
+# Per-client-IP sliding windows. Remove a bucket to disable limiting for it.
+rate_limits:
+  verify:      { limit: 10,  window_seconds: 60 }
+  issue_card:  { limit: 10,  window_seconds: 60 }
+  card_read:   { limit: 120, window_seconds: 60 }
+  card_write:  { limit: 30,  window_seconds: 60 }
+  admin:       { limit: 120, window_seconds: 60 }
+
+# Social media providers. `verification_mode`: simulated | oauth
+providers:
+  youtube:   { enabled: true,  verification_mode: simulated }
+  instagram: { enabled: false }
+  facebook:  { enabled: false }
+  tiktok:    { enabled: false }
+
+# Demonstration data loaded by `python -m app.seed`.
+seed:
+  client:
+    name: Brewhaus Coffee Roasters
+    slug: brewhaus
+    tagline: Small-batch coffee, roasted fresh every morning
+    logo_url: null
+    brand: { primary: "#7c3aed", accent: "#fbbf24" }
+  campaign:
+    name: Subscribe & Scratch
+    slug: brewhaus-subscribe-and-scratch
+    headline: Subscribe, scratch and win!
+    description: >-
+      Subscribe to our YouTube channel for brewing guides and roastery stories,
+      then scratch your digital card for a chance to win vouchers, free coffee and more.
+    terms: >-
+      One scratch card per person. Cards expire 72 hours after they are issued.
+      Prizes are redeemable at any Brewhaus outlet while the campaign is running.
+    platform: youtube
+    duration_days: 90
+    # Overridden by YOUTUBE_CHANNEL_* in `.env` when set.
+    platform_config:
+      channel_id: UC_x5XG1OV2P6uZZ5FSM9Ttw
+      channel_url: https://www.youtube.com/@YouTube
+      channel_name: Brewhaus Coffee
+  rewards:
+    - name: ₹100 Gift Voucher
+      description: Congratulations! You won a ₹100 Gift Voucher.
+      reward_type: voucher
+      value: "₹100"
+      icon: "🎁"
+      weight: 10
+      redemption_instructions: Show this claim reference at any Brewhaus counter to get ₹100 off your bill.
+    - name: Free Coffee
+      description: You won a Free Coffee.
+      reward_type: product
+      value: "1 cup"
+      icon: "☕"
+      weight: 20
+      redemption_instructions: Show this claim reference to the barista for one free regular coffee of your choice.
+    - name: 10% Discount Coupon
+      description: You won a 10% Discount Coupon.
+      reward_type: discount
+      value: "10%"
+      icon: "🏷️"
+      weight: 30
+      redemption_instructions: Quote this claim reference at checkout to get 10% off your next order.
+    - name: Surprise Gift
+      description: You won a Surprise Gift.
+      reward_type: surprise
+      value: null
+      icon: "✨"
+      weight: 5
+      total_quantity: 50
+      redemption_instructions: Visit any Brewhaus outlet with this claim reference to collect your surprise gift.
+    - name: Better luck next time
+      description: No prize this time — thank you for subscribing!
+      reward_type: none
+      value: null
+      icon: "🍀"
+      weight: 35
+      is_prize: false
+      redemption_instructions: null
