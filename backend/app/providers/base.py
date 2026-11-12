@@ -23,6 +23,8 @@ class PlatformInfo:
     brand_color: str
     enabled: bool
     verification_mode: str  # "simulated", "oauth", "unavailable"
+    #: True when verifying also performs the follow/subscribe for the participant.
+    auto_subscribe: bool = False
 
 
 @dataclass(frozen=True)

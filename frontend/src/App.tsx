@@ -3,6 +3,7 @@ import { PageMessage } from "./components/ui";
 import { AdminPage } from "./pages/admin/AdminPage";
 import { HomePage } from "./pages/HomePage";
 import { LandingPage } from "./pages/LandingPage";
+import { OAuthCallbackPage } from "./pages/OAuthCallbackPage";
 import { ScratchPage } from "./pages/ScratchPage";
 
 export function App() {
@@ -11,6 +12,7 @@ export function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/c/:slug" element={<LandingPage />} />
       <Route path="/s/:token" element={<ScratchPage />} />
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route
         path="*"

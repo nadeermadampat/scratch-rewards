@@ -1,9 +1,11 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import type { Campaign, IssuedCard } from "../api/types";
+import { OAuthSteps } from "../components/OAuthSteps";
+import { Step } from "../components/Step";
 import { BrandHeader, CopyField, PageMessage, Spinner, YouTubeIcon } from "../components/ui";
 import { useEngagementFlow } from "../hooks/useEngagementFlow";
 import { applyBrand, timeLeft } from "../lib/util";
@@ -73,7 +75,11 @@ export function LandingPage() {
         )}
 
         {campaign.is_open && campaign.platform.enabled ? (
-          <EngagementSteps campaign={campaign} />
+          campaign.platform.verification_mode === "oauth" ? (
+            <OAuthSteps campaign={campaign} />
+          ) : (
+            <EngagementSteps campaign={campaign} />
+          )
         ) : (
           <div className="panel mt-7 p-6 text-center">
             <p className="text-3xl">⏸️</p>
@@ -94,25 +100,6 @@ export function LandingPage() {
         )}
       </div>
     </main>
-  );
-}
-
-function Step({ number, title, done, children }: { number: number; title: string; done?: boolean; children: ReactNode }) {
-  return (
-    <li className="flex gap-3.5">
-      <div
-        className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold ${
-          done ? "bg-emerald-400 text-ink" : "bg-white/10 text-white ring-1 ring-white/20"
-        }`}
-        aria-hidden
-      >
-        {done ? "✓" : number}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className="font-display text-lg font-bold leading-tight">{title}</h3>
-        <div className="mt-2.5">{children}</div>
-      </div>
-    </li>
   );
 }
 

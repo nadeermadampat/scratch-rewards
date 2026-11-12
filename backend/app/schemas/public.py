@@ -28,6 +28,7 @@ class PlatformOut(BaseModel):
     brand_color: str
     enabled: bool
     verification_mode: str
+    auto_subscribe: bool = False
 
 
 class EngagementOut(BaseModel):
@@ -74,7 +75,9 @@ class CampaignOut(BaseModel):
     scratch: ScratchSettingsOut
 
 
-class VerifyRequest(BaseModel):
+class ParticipantRequest(BaseModel):
+    """Who is taking part in which campaign, and their consent."""
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     campaign_id: str = Field(min_length=1, max_length=120, description="Campaign id or slug")
@@ -83,12 +86,27 @@ class VerifyRequest(BaseModel):
     email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,20}$")
     consent: bool = False
-    proof: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("name", "phone", "email", mode="before")
     @classmethod
     def _blank_to_none(cls, value: Any) -> Any:
         return None if isinstance(value, str) and not value.strip() else value
+
+
+class AuthorizeResponse(BaseModel):
+    #: Where to send the browser (the platform's sign-in / consent page).
+    authorization_url: str
+    #: Echoed back by the platform; the browser must present it again on return.
+    state: str
+
+
+class OAuthCompleteRequest(BaseModel):
+    state: str = Field(min_length=32, max_length=128)
+    code: str = Field(min_length=1, max_length=2048)
+
+
+class VerifyRequest(ParticipantRequest):
+    proof: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("proof")
     @classmethod
@@ -106,6 +124,7 @@ class VerifyResponse(BaseModel):
     #: One-time token to exchange for a scratch card. Present only when verified.
     verification_token: str | None = None
     expires_at: datetime | None = None
+    campaign_slug: str | None = None
 
 
 class IssueCardRequest(BaseModel):

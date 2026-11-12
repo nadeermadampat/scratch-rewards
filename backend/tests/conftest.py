@@ -10,7 +10,16 @@ os.environ.update(
     SECRET_KEY="test-secret",
     RATE_LIMIT_ENABLED="true",
     APP_BASE_URL="http://testserver",
+    # Blank out anything a developer's local .env might set, so tests are repeatable.
+    YOUTUBE_CHANNEL_ID="",
+    YOUTUBE_CHANNEL_URL="",
+    YOUTUBE_CHANNEL_NAME="",
+    YOUTUBE_VERIFICATION_MODE="",
+    YOUTUBE_OAUTH_CLIENT_ID="test-client-id",
+    YOUTUBE_OAUTH_CLIENT_SECRET="test-client-secret",
+    TRUST_FORWARDED_FOR="false",
 )
+os.environ.pop("YOUTUBE_AUTO_SUBSCRIBE", None)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +34,17 @@ from app.models import Base, Campaign
 from app.seed import seed_demo
 
 ADMIN_HEADERS = {"X-Admin-Key": "test-admin-key"}
+
+
+@pytest.fixture(autouse=True)
+def youtube():
+    """The YouTube provider, reset to simulated mode around every test."""
+    from app.providers import get_registry
+
+    provider = get_registry().get("youtube")
+    provider.mode, provider.auto_subscribe, provider.transport = "simulated", True, None
+    yield provider
+    provider.mode, provider.auto_subscribe, provider.transport = "simulated", True, None
 
 
 @pytest.fixture()

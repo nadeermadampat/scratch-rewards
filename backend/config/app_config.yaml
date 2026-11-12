@@ -7,6 +7,7 @@ scratch_card:
 
 verification:
   token_ttl_minutes: 15     # lifetime of the one-time token returned by /subscriptions/verify
+  oauth_state_ttl_minutes: 10   # time allowed to complete the Google sign-in redirect
 
 # Per-client-IP sliding windows. Remove a bucket to disable limiting for it.
 rate_limits:
@@ -16,9 +17,12 @@ rate_limits:
   card_write:  { limit: 30,  window_seconds: 60 }
   admin:       { limit: 120, window_seconds: 60 }
 
-# Social media providers. `verification_mode`: simulated | oauth
+# Social media providers.
+#   verification_mode: simulated | oauth   (override with YOUTUBE_VERIFICATION_MODE)
+#   auto_subscribe:    in oauth mode, subscribe the signed-in account if it is not
+#                      subscribed yet (override with YOUTUBE_AUTO_SUBSCRIBE)
 providers:
-  youtube:   { enabled: true,  verification_mode: simulated }
+  youtube:   { enabled: true,  verification_mode: simulated, auto_subscribe: true }
   instagram: { enabled: false }
   facebook:  { enabled: false }
   tiktok:    { enabled: false }

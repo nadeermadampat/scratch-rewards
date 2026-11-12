@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     youtube_oauth_client_id: str = ""
     youtube_oauth_client_secret: str = ""
+    #: Optional overrides of providers.youtube in app_config.yaml, so a deployment
+    #: can switch modes without a code change.
+    youtube_verification_mode: str = ""
+    youtube_auto_subscribe: bool | None = None
 
     @field_validator("database_url")
     @classmethod
@@ -69,6 +73,8 @@ class ScratchCardConfig(BaseModel):
 
 class VerificationConfig(BaseModel):
     token_ttl_minutes: int = Field(15, gt=0)
+    #: How long a participant has to finish the sign-in redirect.
+    oauth_state_ttl_minutes: int = Field(10, gt=0)
 
 
 class RateLimitRule(BaseModel):
@@ -79,6 +85,7 @@ class RateLimitRule(BaseModel):
 class ProviderConfig(BaseModel):
     enabled: bool = False
     verification_mode: str = "simulated"
+    auto_subscribe: bool = False
 
 
 class AppConfig(BaseModel):

@@ -19,7 +19,10 @@ export interface Platform {
   action_label: string;
   brand_color: string;
   enabled: boolean;
+  /** "simulated" | "oauth" | "unavailable" */
   verification_mode: string;
+  /** In oauth mode: signing in also subscribes the account if needed. */
+  auto_subscribe: boolean;
 }
 
 export interface CampaignSummary {
@@ -49,13 +52,21 @@ export interface Campaign {
   scratch: { reveal_threshold: number; expiry_hours: number };
 }
 
-export interface VerifyPayload {
+export interface ParticipantPayload {
   campaign_id: string;
   device_id: string;
   name?: string;
   email?: string;
   consent: boolean;
+}
+
+export interface VerifyPayload extends ParticipantPayload {
   proof: Record<string, unknown>;
+}
+
+export interface AuthorizeResult {
+  authorization_url: string;
+  state: string;
 }
 
 export interface VerifyResult {
@@ -65,6 +76,7 @@ export interface VerifyResult {
   message: string | null;
   verification_token: string | null;
   expires_at: string | null;
+  campaign_slug: string | null;
 }
 
 export interface IssuedCard {

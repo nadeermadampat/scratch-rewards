@@ -9,8 +9,11 @@ from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.schemas.common import ApiResponse, ok
 from app.schemas.public import (
+    AuthorizeResponse,
     CardIssuedOut,
     IssueCardRequest,
+    OAuthCompleteRequest,
+    ParticipantRequest,
     ScratchCardOut,
     VerifyRequest,
     VerifyResponse,
@@ -34,6 +37,36 @@ def verify_subscription(
 ):
     """Verify (or, in the MVP, simulate) the subscription for a campaign."""
     return ok(verification_service.verify_subscription(db, payload, meta))
+
+
+@router.post(
+    "/subscriptions/authorize",
+    response_model=ApiResponse[AuthorizeResponse],
+    dependencies=[Depends(rate_limit("verify"))],
+    tags=["subscriptions"],
+)
+def authorize_subscription(
+    payload: ParticipantRequest,
+    db: Session = Depends(get_db),
+    meta: ClientMeta = Depends(get_client_meta),
+):
+    """Start sign-in verification: returns the platform URL to send the browser to."""
+    return ok(verification_service.start_oauth(db, payload, meta))
+
+
+@router.post(
+    "/subscriptions/oauth/complete",
+    response_model=ApiResponse[VerifyResponse],
+    dependencies=[Depends(rate_limit("verify"))],
+    tags=["subscriptions"],
+)
+def complete_oauth(
+    payload: OAuthCompleteRequest,
+    db: Session = Depends(get_db),
+    meta: ClientMeta = Depends(get_client_meta),
+):
+    """Finish sign-in verification with the `state` and `code` the platform returned."""
+    return ok(verification_service.complete_oauth(db, payload.state, payload.code, meta))
 
 
 @router.post(

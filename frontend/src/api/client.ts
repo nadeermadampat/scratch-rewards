@@ -1,9 +1,11 @@
 import type {
   AdminCampaign,
   AdminOverview,
+  AuthorizeResult,
   Campaign,
   CampaignSummary,
   IssuedCard,
+  ParticipantPayload,
   RedeemResult,
   ScratchCardView,
   VerifyPayload,
@@ -53,6 +55,9 @@ export const api = {
   listCampaigns: () => request<CampaignSummary[]>("/campaigns"),
   getCampaign: (idOrSlug: string) => request<Campaign>(`/campaigns/${encodeURIComponent(idOrSlug)}`),
   verify: (payload: VerifyPayload) => request<VerifyResult>("/subscriptions/verify", post(payload)),
+  authorize: (payload: ParticipantPayload) => request<AuthorizeResult>("/subscriptions/authorize", post(payload)),
+  completeOAuth: (state: string, code: string) =>
+    request<VerifyResult>("/subscriptions/oauth/complete", post({ state, code })),
   issueCard: (verificationToken: string) =>
     request<IssuedCard>("/scratch-cards", post({ verification_token: verificationToken })),
   getCard: (token: string) => request<ScratchCardView>(`/scratch-cards/${encodeURIComponent(token)}`),

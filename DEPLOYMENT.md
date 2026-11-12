@@ -146,8 +146,8 @@ The app accepts `postgres://…` and `postgresql://…` URLs and both pooled and
    | `CORS_ORIGINS` | `https://placeholder.invalid` for now; fixed in section 8 |
 
 3. Mark `SECRET_KEY`, `ADMIN_API_KEY` and `DATABASE_URL` as **Sensitive** if the option is shown.
-4. Do **not** add the `YOUTUBE_*` variables unless you switch to OAuth verification. The
-   channel is stored in the database by the seed step below.
+4. Do **not** add the `YOUTUBE_*` variables yet. Real verification with Google sign-in is
+   switched on later in section 13. The channel is stored in the database by the seed step below.
 
 `TRUST_FORWARDED_FOR=true` makes rate limiting and the audit trail use the visitor's IP
 address instead of Vercel's proxy address.
@@ -162,7 +162,7 @@ Migrations are run once from your machine against the hosted database.
 2. Point this terminal at the hosted database (paste the string from section 4, keep the quotes):
 
    ```powershell
-   $env:DATABASE_URL = "<paste connection string>"
+   $env:DATABASE_URL = "postgresql://neondb_owner:npg_s3HryDuV8nLY@ep-wild-hill-azo639qg-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
    ```
 
 3. Create the tables:
@@ -298,8 +298,121 @@ Do this on a phone as well as a desktop.
   the Vercel Marketplace) before a real campaign.
 - **No local files.** SQLite cannot be used; the database must be hosted PostgreSQL.
 - **Migrations are manual** (section 6). Nothing runs them on deploy.
-- **Verification is still simulated.** Anyone who clicks through receives a card.
+- **Verification is simulated until you complete section 13.** In simulated mode anyone who clicks through receives a card.
 - `docker-compose.yml`, the `Dockerfile`s and `nginx.conf` are not used by Vercel.
+
+---
+
+## 13. Turn on real verification (Google sign-in and one-click subscribe)
+
+By default the site runs in **simulated** mode. These steps switch it to Google sign-in:
+the visitor signs in, the server checks with YouTube whether that account is subscribed to
+your channel, and (with one-click subscribe on) subscribes it if it is not. No database
+migration is needed.
+
+> **Status:** this flow passes its automated tests against a stand-in for Google, but has
+> **not been run against the real Google and YouTube services**. Do step 13.5 before
+> sending real visitors to it. Menu names in Google Cloud Console change from time to
+> time; look for the nearest match if a label differs.
+
+### 13.1 Create the Google Cloud project
+
+1. Open <https://console.cloud.google.com> and sign in with the Google account that should own the app.
+2. Project picker (top bar) → **New Project** → name it `scratch-rewards` → **Create**, then select it.
+3. Menu → **APIs & Services → Library** → search **YouTube Data API v3** → open it → **Enable**.
+
+### 13.2 Configure the consent screen
+
+1. Menu → **APIs & Services → OAuth consent screen** (also shown as **Google Auth Platform**).
+2. **Get started** / **Branding**: app name (what visitors see, e.g. your brand name), a support email, then **Audience: External**, a developer contact email, agree, **Create**.
+3. **Data Access** (or **Scopes**) → **Add or remove scopes** → tick one of the following, then **Update** and **Save**:
+
+   | Mode | Scope to add |
+   |---|---|
+   | One-click subscribe (default) | `https://www.googleapis.com/auth/youtube.force-ssl` |
+   | Check only | `https://www.googleapis.com/auth/youtube.readonly` |
+
+4. **Audience** → **Test users** → **Add users** → add the Google email of everyone who will
+   test. While the app is in **Testing**, only these accounts (up to 100) can sign in.
+
+### 13.3 Create the OAuth client
+
+1. **APIs & Services → Credentials** (or **Clients**) → **Create credentials → OAuth client ID**.
+2. **Application type:** Web application. **Name:** `scratch-rewards-web`.
+3. **Authorized redirect URIs** → **Add URI**, once for each address the site is served from:
+
+   - `https://WEB_URL/oauth/callback` (your real web address, exactly as in the browser bar, no trailing slash)
+   - `http://localhost:5173/oauth/callback` (only if you want to test locally)
+
+4. **Create**. Copy the **Client ID** and **Client secret**. Treat the secret as a password.
+
+The redirect address is built from `APP_BASE_URL` on the API project, so that variable must
+be exactly `https://WEB_URL`. A mismatch gives Google's `redirect_uri_mismatch` error.
+
+### 13.4 Set the variables and redeploy
+
+1. Push the latest code so both Vercel projects rebuild:
+
+   ```powershell
+   git add .
+   ```
+
+   ```powershell
+   git commit -m "Google sign-in verification"
+   ```
+
+   ```powershell
+   git push
+   ```
+
+2. **API** project → **Settings → Environment Variables** → add for **Production**:
+
+   | Key | Value |
+   |---|---|
+   | `YOUTUBE_VERIFICATION_MODE` | `oauth` |
+   | `YOUTUBE_AUTO_SUBSCRIBE` | `true` for one-click subscribe, `false` for check only |
+   | `YOUTUBE_OAUTH_CLIENT_ID` | the Client ID |
+   | `YOUTUBE_OAUTH_CLIENT_SECRET` | the Client secret (mark as Sensitive) |
+
+3. Redeploy the **API** project (**Deployments → ⋯ → Redeploy**) so the variables apply.
+4. Check `https://API_URL/api/campaigns/<campaign-slug>`: `platform.verification_mode`
+   should be `"oauth"`.
+
+The channel does not need changing: a handle such as `@KodeKloud` is looked up automatically.
+To switch back to simulated mode, delete `YOUTUBE_VERIFICATION_MODE` and redeploy the API.
+
+### 13.5 Test with a real account
+
+Use a Google account that is in the test-user list and is **not** yet subscribed to the channel.
+
+1. Open `https://WEB_URL`. The form now ends with **Continue with Google**.
+2. Tick the consent box → **Continue with Google** → pick the account. Google shows an
+   "unverified app" notice while in Testing: **Continue**. Allow the YouTube permission.
+3. You return to the site, see "Confirming with YouTube…", then land on your scratch card.
+4. Open YouTube with the same account → **Subscriptions**: the channel is now listed.
+5. Repeat from another browser with the **same** Google account: you get the same card, not a new one.
+6. Repeat and press **Cancel** on Google's screen: the site says access was not allowed and offers **Try again**.
+7. Admin dashboard → the new card appears in **Recent activity**.
+
+If step 3 fails, the message on the page says why; the API project's **Logs** has the detail
+(`YouTube API error: <status> <reason>`).
+
+### 13.6 Before opening it to the public
+
+- **Google verification.** In **Audience**, **Publish app** moves it out of Testing. Because
+  the YouTube scopes are sensitive, Google then requires verification: a privacy policy on
+  your own verified domain, a justification for the scope and usually a short demo video.
+  Until that is approved, non-test users see a warning or are blocked.
+- **Quota.** The YouTube Data API allows 10,000 units a day by default. A subscribe call is
+  listed at about 50 units, so one-click subscribe supports roughly 190 new subscribers a
+  day; check-only costs 2–3 units per visitor. Request a higher quota in
+  **APIs & Services → YouTube Data API v3 → Quotas** before a campaign.
+- **Policy.** Rewarding subscriptions, and subscribing accounts through the API in exchange
+  for a prize, may conflict with YouTube's fake-engagement and API policies. Have this
+  reviewed before applying for verification.
+- **Privacy notice.** State that the site uses Google sign-in to check or create a YouTube
+  subscription, stores the visitor's YouTube channel ID to prevent duplicate entries, and
+  does not keep access to the account (the token is revoked immediately after use).
 
 ---
 

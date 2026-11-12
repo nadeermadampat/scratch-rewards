@@ -4,7 +4,8 @@ A social media engagement platform: a business asks visitors to subscribe to its
 YouTube channel, and each verified visitor gets a unique digital scratch card with a
 prize decided on the server.
 
-This is an MVP. Subscription verification is **simulated** and rewards are demo data,
+This is an MVP. Subscription verification is **simulated** by default (real verification
+through Google sign-in can be switched on, see below) and rewards are demo data,
 but the structure is multi-client, multi-campaign and multi-platform from the start.
 
 ## What is implemented
@@ -81,7 +82,10 @@ Secrets go in `.env`; everything else is in `backend/config/app_config.yaml`.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Used by docker-compose |
 | `PUBLIC_BASE_URL` | docker-compose only: public URL of the stack (default `http://localhost:8080`) |
 | `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_URL`, `YOUTUBE_CHANNEL_NAME` | Channel used when seeding the demo campaign |
-| `YOUTUBE_API_KEY`, `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` | Only for `oauth` verification mode |
+| `YOUTUBE_VERIFICATION_MODE` | `oauth` to verify through Google sign-in. Empty uses `app_config.yaml` (`simulated`) |
+| `YOUTUBE_AUTO_SUBSCRIBE` | In oauth mode: `true` subscribes the signed-in account if needed, `false` only checks |
+| `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` | Google OAuth client. Required in oauth mode |
+| `TRUST_FORWARDED_FOR` | `true` behind a proxy that sets `X-Forwarded-For` itself (e.g. Vercel) |
 
 `app_config.yaml` holds card expiry (72 h), reveal threshold (50%), cards per
 participant (1), verification token lifetime, rate limits, which providers are enabled
@@ -141,8 +145,24 @@ or table changes are needed.
 - Real verification means the user signs in with Google and grants `youtube.readonly`, then the server calls `subscriptions.list?mine=true&forChannelId=<channel>`. That scope is classed as sensitive, so Google requires app verification before public use.
 - Without the user's OAuth grant you can only see subscriptions that the user has made public, which is not the default.
 - There are no subscriber webhooks. A user can unsubscribe straight after winning; re-checking later needs a stored refresh token.
-- `providers.youtube.verification_mode: oauth` selects a code path that implements the above. It has **not** been run against Google, and the frontend redirect and callback are not built.
+- `oauth` mode implements the above end to end, and with `auto_subscribe` it also subscribes the signed-in account through the API. See the next section. It passes tests against a stand-in for Google but has **not** been run against the real services.
 - Rewarding people for subscribing may conflict with YouTube's fake-engagement and contest policies. Get this reviewed before a real launch.
+
+### Google sign-in verification (oauth mode)
+
+| Step | What happens |
+|---|---|
+| 1 | The visitor ticks consent and presses **Continue with Google**. The page states that their account will be subscribed (when `auto_subscribe` is on) |
+| 2 | `POST /api/subscriptions/authorize` stores a pending verification with a random `state` and returns Google's sign-in URL |
+| 3 | Google sends the browser back to `/oauth/callback?code=…&state=…`. The page checks `state` against the one it saved |
+| 4 | `POST /api/subscriptions/oauth/complete` burns the `state`, exchanges the code, and asks YouTube whether the account is subscribed to the campaign's channel |
+| 5 | Not subscribed and `auto_subscribe` on: the server creates the subscription. Off: verification fails with a message to subscribe first |
+| 6 | The Google token is revoked. The response carries the one-time token that `POST /api/scratch-cards` exchanges for a card |
+
+The visitor's YouTube channel ID is stored as their identity, so the same Google account
+gets the same card from any browser. A channel handle (`@name`) in the campaign config is
+resolved to its channel ID automatically. Setup steps are in
+[DEPLOYMENT.md](DEPLOYMENT.md), section 13.
 
 ## Database schema
 
@@ -170,6 +190,8 @@ Every response is `{"success": true, "data": …}` or
 | `GET /api/campaigns/{id-or-slug}` | Campaign, branding, engagement target, prize names |
 | `GET /api/social-platforms` | Known platforms and availability |
 | `POST /api/subscriptions/verify` | Body: `campaign_id`, `consent`, `proof`, optional `device_id`, `name`, `email`, `phone` |
+| `POST /api/subscriptions/authorize` | oauth mode. Same body without `proof`. Returns `authorization_url` and `state` |
+| `POST /api/subscriptions/oauth/complete` | oauth mode. Body: `state`, `code`. Returns the same shape as `verify` |
 | `POST /api/scratch-cards` | Body: `verification_token`. Returns the card token and URL |
 | `GET /api/scratch-cards/{token}` | Card state |
 | `POST /api/scratch-cards/{token}/start` | Record the first scratch; returns the reward |
@@ -198,7 +220,7 @@ Admin routes need the `X-Admin-Key` header. Common error codes: `VALIDATION_ERRO
 ## Tests
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest      # 35 tests
+cd backend && .venv/Scripts/python -m pytest      # 51 tests
 cd frontend && npm test                           # 6 tests
 ```
 
@@ -211,8 +233,9 @@ cover the scratch-progress grid.
 
 ## Known limitations
 
-- **Verification is simulated.** Anyone who clicks through gets a card.
-- **Participant identity is a browser id.** Clearing storage or using another browser yields another card. Real identity needs OAuth or a verified email or phone.
+- **In simulated mode** anyone who clicks through gets a card, and a participant is only a browser id, so clearing storage yields another card. Oauth mode fixes both.
+- **Oauth mode has not been run against real Google services**, needs Google's app verification before public use, and is limited by YouTube API quota (see DEPLOYMENT.md, section 13.6).
+- A visitor can unsubscribe after winning; nothing re-checks later.
 - **Rate limiting is in memory**, so it is per process and resets on restart. Use Redis before scaling out.
 - **Admin access is a single shared key** with no users or roles.
 - **Card tokens are stored in plain text** so the admin and repeat requests can return the link. Hash them if that is not needed.
@@ -222,7 +245,7 @@ cover the scratch-progress grid.
 
 ## Suggested next steps
 
-1. Google OAuth flow for real YouTube verification, after the policy review above.
+1. Run the Google sign-in flow against real accounts, then complete Google's app verification and the policy review above.
 2. Test on real Android and iOS devices; add a QR code on the "card ready" screen for desktop-to-phone hand-off.
 3. Admin users and roles, campaign and client creation in the UI, CSV export.
 4. Redis-backed rate limiting, and abuse signals built from `audit_events` (many cards per IP hash, rapid completions).
