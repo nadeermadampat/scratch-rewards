@@ -148,6 +148,8 @@ export interface Activity {
   redemption_status: string;
   generated_at: string;
   completed_at: string | null;
+  return_visits: number;
+  replays: number;
 }
 
 export interface AdminOverview {
@@ -165,6 +167,7 @@ export interface AdminCampaign {
   status: "draft" | "active" | "paused" | "ended";
   starts_at: string | null;
   ends_at: string | null;
+  max_cards_per_user: number;
 }
 
 export interface RedeemResult {

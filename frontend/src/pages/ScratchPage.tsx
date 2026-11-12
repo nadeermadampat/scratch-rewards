@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Confetti } from "../components/Confetti";
 import { RewardFace } from "../components/RewardFace";
 import { RewardResult } from "../components/RewardResult";
@@ -9,16 +9,19 @@ import { BrandHeader, PageMessage, SoundIcon, Spinner } from "../components/ui";
 import { useScratchCard } from "../hooks/useScratchCard";
 import type { Phase } from "../hooks/useScratchCard";
 import { ScratchAudio } from "../lib/scratch/audio";
-import { applyBrand, timeLeft } from "../lib/util";
+import { applyBrand, formatDateTime, timeLeft } from "../lib/util";
 
-function heading(phase: Phase, isPrize: boolean | undefined): string {
+function heading(phase: Phase, isPrize: boolean | undefined, revealedNow: boolean, isReplay: boolean): string {
   switch (phase) {
+    case "initial":
+      return isReplay ? "Scratch again to see your reward!" : "Scratch to reveal your surprise!";
     case "scratching":
     case "partial":
       return "Keep scratching…";
     case "revealed":
       return "Here it comes…";
     case "completed":
+      if (!revealedNow) return "Your scratch card result";
       return isPrize ? "Congratulations! 🎉" : "Better luck next time";
     default:
       return "Scratch to reveal your surprise!";
@@ -27,11 +30,26 @@ function heading(phase: Phase, isPrize: boolean | undefined): string {
 
 export function ScratchPage() {
   const { token = "" } = useParams();
-  const { phase, card, error, revealedNow, beginScratch, setStroking, reveal, retrySave, revealWithoutScratching } =
-    useScratchCard(token);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Set when the participant arrives from the campaign flow: they should always get to scratch.
+  const arrivedFromCampaign = (location.state as { replay?: boolean } | null)?.replay === true;
+  const {
+    phase, card, error, revealedNow, replayRound,
+    beginScratch, setStroking, reveal, retrySave, revealWithoutScratching, startReplay,
+  } = useScratchCard(token, arrivedFromCampaign);
+  const isReplay = replayRound > 0;
   const audio = useMemo(() => new ScratchAudio(), []);
   const [muted, setMuted] = useState(audio.muted);
   const [progress, setProgress] = useState(0);
+
+  // A new replay starts from a fresh coating.
+  useEffect(() => setProgress(0), [replayRound]);
+
+  // Once revealed, forget the "arrived from campaign" marker so a refresh shows the result.
+  useEffect(() => {
+    if (revealedNow && arrivedFromCampaign) navigate(location.pathname, { replace: true, state: null });
+  }, [revealedNow, arrivedFromCampaign, navigate, location.pathname]);
 
   useEffect(() => applyBrand(card?.campaign.client.brand), [card?.campaign.client.brand]);
 
@@ -79,8 +97,9 @@ export function ScratchPage() {
     setMuted(!muted);
   };
 
+  // overflow-x-clip (not hidden): hidden would turn <main> into a scroll container and trap page scrolling.
   return (
-    <main className="app-bg min-h-[100dvh] overflow-x-hidden overscroll-none">
+    <main className="app-bg min-h-[100dvh] overflow-x-clip">
       <Confetti fire={revealedNow && isPrize === true} />
       <div className="mx-auto flex w-full max-w-md flex-col items-center px-4 pb-10">
         <BrandHeader
@@ -99,13 +118,13 @@ export function ScratchPage() {
         />
 
         <motion.h1
-          key={heading(phase, isPrize)}
+          key={heading(phase, isPrize, revealedNow, isReplay)}
           className="mt-2 min-h-[2.6em] text-balance text-center font-display text-[1.7rem] font-extrabold leading-tight"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          {heading(phase, isPrize)}
+          {heading(phase, isPrize, revealedNow, isReplay)}
         </motion.h1>
 
         {/* Ticket */}
@@ -120,6 +139,7 @@ export function ScratchPage() {
             <span className="font-mono text-white/45">#{card.reference}</span>
           </div>
           <ScratchCard
+            key={replayRound} // remount: a replay gets a freshly painted coating
             threshold={card.reveal_threshold}
             cleared={cleared}
             ready={card.reward !== null}
@@ -173,17 +193,38 @@ export function ScratchPage() {
           </p>
         )}
 
+        {phase === "completed" && !revealedNow && (
+          <div role="status" className="mt-4 w-full rounded-2xl border border-white/15 bg-white/[0.07] px-4 py-3 text-sm text-white/80">
+            <p>
+              <strong className="text-white">You've already scratched this card</strong>
+              {card.scratch_completed_at ? ` on ${formatDateTime(card.scratch_completed_at)}` : ""}. Your result is
+              below.
+            </p>
+            <button type="button" className="btn-ghost mt-3 min-h-[40px] w-full text-sm" onClick={startReplay}>
+              Scratch it again
+            </button>
+          </div>
+        )}
+
+        {phase === "completed" && revealedNow && isReplay && (
+          <p role="status" className="mt-4 w-full rounded-2xl border border-white/15 bg-white/[0.07] px-4 py-3 text-sm text-white/80">
+            This is the same result as your first scratch
+            {card.scratch_completed_at ? ` on ${formatDateTime(card.scratch_completed_at)}` : ""}. It's one reward per
+            person.
+          </p>
+        )}
+
         {phase === "completed" && <RewardResult card={card} />}
 
         {!cleared && (
           <div className="mt-5 flex flex-col items-center gap-2 text-xs text-white/45">
-            <p>Card expires in {timeLeft(card.expires_at)}</p>
+            {!isReplay && <p>Card expires in {timeLeft(card.expires_at)}</p>}
             <button
               type="button"
               className="rounded-lg px-3 py-2 underline underline-offset-4 hover:text-white/80"
               onClick={() => void revealWithoutScratching()}
             >
-              Can't scratch? Reveal my result
+              {isReplay ? "Skip to my result" : "Can't scratch? Reveal my result"}
             </button>
           </div>
         )}

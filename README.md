@@ -196,6 +196,7 @@ Every response is `{"success": true, "data": …}` or
 | `GET /api/scratch-cards/{token}` | Card state |
 | `POST /api/scratch-cards/{token}/start` | Record the first scratch; returns the reward |
 | `POST /api/scratch-cards/{token}/complete` | Complete the card; returns the claim reference |
+| `POST /api/scratch-cards/{token}/replay` | Record that a finished card was scratched again. Tracking only; the result never changes |
 | `GET /api/rewards/{id}` | Reward definition, without odds |
 | `GET /api/admin/overview?campaign_id=` | Totals, distribution, recent activity |
 | `GET /api/admin/campaigns`, `PATCH /api/admin/campaigns/{id}` | List campaigns; change name or status |

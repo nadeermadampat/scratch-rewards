@@ -212,10 +212,11 @@ function CardReady({ card }: { card: IssuedCard }) {
         {card.existing ? "You already have a scratch card" : "Your scratch card is ready!"}
       </h2>
       <p className="mt-1 text-sm text-white/65">
-        {card.existing ? "It's one card per person — here is yours." : "Thanks for subscribing."} It expires in{" "}
-        {timeLeft(card.expires_at)}.
+        {card.existing
+          ? "It's one card per person. You can scratch yours again; the result stays the same."
+          : `Thanks for subscribing. It expires in ${timeLeft(card.expires_at)}.`}
       </p>
-      <Link to={`/s/${card.token}`} className="btn-primary mt-5 w-full text-base">
+      <Link to={`/s/${card.token}`} state={{ replay: true }} className="btn-primary mt-5 w-full text-base">
         Open my scratch card
       </Link>
       <div className="mt-5 text-left">

@@ -78,6 +78,37 @@ function StatTile({ label, value, note }: { label: string; value: number; note?:
   );
 }
 
+/** How many cards one participant may receive. Raise it to re-test with the same account. */
+function CardLimit({ campaign, onSave }: { campaign: AdminCampaign; onSave: (limit: number) => Promise<void> }) {
+  const [value, setValue] = useState(String(campaign.max_cards_per_user));
+  const parsed = Number(value);
+  const valid = Number.isInteger(parsed) && parsed >= 1 && parsed <= 1000;
+  const dirty = value !== String(campaign.max_cards_per_user);
+  return (
+    <label className="flex items-center gap-2 text-sm text-white/60" title="Raise this to get a fresh card when testing with the same account. Use 1 for a live campaign.">
+      Cards per participant
+      <input
+        className="field w-16 px-2 py-1.5 text-sm tabular-nums"
+        type="number"
+        min={1}
+        max={1000}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      {dirty && (
+        <button
+          type="button"
+          className="rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
+          disabled={!valid}
+          onClick={() => void onSave(parsed)}
+        >
+          Save
+        </button>
+      )}
+    </label>
+  );
+}
+
 const percent = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "—");
 
 function Dashboard({ adminKey, onSignOut }: { adminKey: string; onSignOut: () => void }) {
@@ -116,6 +147,16 @@ function Dashboard({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =>
     if (!campaign) return;
     try {
       await client.updateCampaign(campaign.id, { status: campaign.status === "active" ? "paused" : "active" });
+      await load();
+    } catch (e) {
+      setError((e as ApiError).message);
+    }
+  };
+
+  const saveCardLimit = async (limit: number) => {
+    if (!campaign) return;
+    try {
+      await client.updateCampaign(campaign.id, { max_cards_per_user: limit });
       await load();
     } catch (e) {
       setError((e as ApiError).message);
@@ -170,6 +211,7 @@ function Dashboard({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =>
                   {campaign.status === "active" ? "Pause campaign" : "Resume campaign"}
                 </button>
               )}
+              <CardLimit key={`${campaign.id}:${campaign.max_cards_per_user}`} campaign={campaign} onSave={saveCardLimit} />
               <a className="text-xs text-accent underline underline-offset-4" href={`/c/${campaign.slug}`} target="_blank" rel="noreferrer">
                 Open landing page ↗
               </a>

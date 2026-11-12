@@ -18,6 +18,7 @@ from app.schemas.admin import (
     RewardUpdate,
     StatsOut,
 )
+from app.services import campaign_service
 from app.services.audit import ClientMeta, record_event
 
 
@@ -107,8 +108,19 @@ def overview(db: Session, campaign_id: str | None = None, activity_limit: int = 
     cards = db.scalars(
         select(ScratchCard).where(*card_scope).order_by(ScratchCard.generated_at.desc()).limit(activity_limit)
     ).all()
+    tracked = ("card.issue_limit_reached", "card.replayed")
+    repeat_counts = {
+        (card_id, event_type): n
+        for card_id, event_type, n in db.execute(
+            select(AuditEvent.scratch_card_id, AuditEvent.event_type, func.count(AuditEvent.id))
+            .where(AuditEvent.scratch_card_id.in_([c.id for c in cards]), AuditEvent.event_type.in_(tracked))
+            .group_by(AuditEvent.scratch_card_id, AuditEvent.event_type)
+        )
+    } if cards else {}
     activity = [
         ActivityOut(
+            return_visits=repeat_counts.get((c.id, "card.issue_limit_reached"), 0),
+            replays=repeat_counts.get((c.id, "card.replayed"), 0),
             card_reference=c.id[:8].upper(),
             user_label=_user_label(c.user),
             campaign_name=c.campaign.name,
@@ -132,6 +144,7 @@ def _campaign_view(c: Campaign) -> AdminCampaignOut:
     return AdminCampaignOut(
         id=c.id, slug=c.slug, name=c.name, client_name=c.client.name, platform=c.platform,
         status=c.status, starts_at=c.starts_at, ends_at=c.ends_at,
+        max_cards_per_user=campaign_service.setting(c, "max_cards_per_user"),
     )
 
 
@@ -141,7 +154,11 @@ def update_campaign(db: Session, campaign_id: str, changes: CampaignUpdate, meta
         raise AppError(404, "CAMPAIGN_NOT_FOUND", "This campaign does not exist.")
     data = changes.model_dump(exclude_unset=True, exclude_none=True)
     for field, value in data.items():
-        setattr(campaign, field, value)
+        if field == "max_cards_per_user":
+            # Reassign (not mutate) so the JSON column is seen as changed.
+            campaign.settings = {**(campaign.settings or {}), field: value}
+        else:
+            setattr(campaign, field, value)
     record_event(db, "admin.campaign_updated", meta=meta, campaign_id=campaign.id, payload=data)
     db.commit()
     return _campaign_view(campaign)

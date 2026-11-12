@@ -322,3 +322,55 @@ def test_admin_pause_and_redeem(client, issue_card, campaign, session_factory):
     paused = client.patch(f"/api/admin/campaigns/{campaign.id}", headers=ADMIN_HEADERS, json={"status": "paused"})
     assert paused.json()["data"]["status"] == "paused"
     assert client.get(f"/api/campaigns/{campaign.slug}").json()["data"]["is_open"] is False
+
+
+def test_admin_can_raise_cards_per_participant(client, issue_card, campaign):
+    device = "device-limit-0000-0001"
+    first = issue_card(device_id=device)
+    assert issue_card(device_id=device)["token"] == first["token"]  # default: one card
+
+    updated = client.patch(
+        f"/api/admin/campaigns/{campaign.id}", headers=ADMIN_HEADERS, json={"max_cards_per_user": 3}
+    )
+    assert updated.json()["data"]["max_cards_per_user"] == 3
+
+    second = issue_card(device_id=device)
+    assert second["token"] != first["token"]
+    assert second["existing"] is False
+    third = issue_card(device_id=device)
+    assert issue_card(device_id=device)["token"] == third["token"]  # capped at three
+
+    bad = client.patch(f"/api/admin/campaigns/{campaign.id}", headers=ADMIN_HEADERS, json={"max_cards_per_user": 0})
+    assert bad.status_code == 422
+
+
+def test_replay_is_tracked_and_never_changes_the_result(client, issue_card, campaign, session_factory):
+    device = "device-replay-0000-0001"
+    token = issue_card(device_id=device)["token"]
+
+    # Replaying an unscratched card records nothing and leaks nothing.
+    early = client.post(f"/api/scratch-cards/{token}/replay").json()["data"]
+    assert early["status"] == "opened" or early["status"] == "issued"
+    assert early["reward"] is None
+
+    done = client.post(f"/api/scratch-cards/{token}/complete").json()["data"]
+    before = _card_row(session_factory, token)
+
+    # The participant comes back through the campaign twice and scratches again each time.
+    for _ in range(2):
+        assert issue_card(device_id=device)["token"] == token
+        again = client.post(f"/api/scratch-cards/{token}/replay").json()["data"]
+        assert again["reward"]["id"] == done["reward"]["id"]
+        assert again["claim_reference"] == done["claim_reference"]
+
+    after = _card_row(session_factory, token)
+    assert after.reward_id == before.reward_id
+    assert after.scratch_completed_at == before.scratch_completed_at
+    assert after.claim_reference == before.claim_reference
+
+    row = client.get(f"/api/admin/overview?campaign_id={campaign.id}", headers=ADMIN_HEADERS).json()["data"][
+        "recent_activity"
+    ][0]
+    assert row["return_visits"] == 2
+    assert row["replays"] == 2
+    assert client.post("/api/scratch-cards/" + "A" * 43 + "/replay").status_code == 404

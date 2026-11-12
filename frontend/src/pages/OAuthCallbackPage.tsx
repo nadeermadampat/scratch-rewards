@@ -43,7 +43,8 @@ export function OAuthCallbackPage() {
           return;
         }
         const card = await api.issueCard(verification.verification_token);
-        navigate(`/s/${card.token}`, { replace: true });
+        // Coming through the campaign always ends in scratching, even for a returning participant.
+        navigate(`/s/${card.token}`, { replace: true, state: { replay: true } });
       } catch (e) {
         setFailure((e as ApiError).message);
       }

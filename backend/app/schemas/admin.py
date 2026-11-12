@@ -39,6 +39,10 @@ class ActivityOut(BaseModel):
     redemption_status: str
     generated_at: datetime
     completed_at: datetime | None = None
+    #: Times the participant came back through the campaign and was given this card again.
+    return_visits: int = 0
+    #: Times the finished card was scratched again.
+    replays: int = 0
 
 
 class OverviewOut(BaseModel):
@@ -58,11 +62,14 @@ class AdminCampaignOut(BaseModel):
     status: str
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    max_cards_per_user: int = 1
 
 
 class CampaignUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     status: Literal["draft", "active", "paused", "ended"] | None = None
+    #: How many cards one participant may receive in this campaign.
+    max_cards_per_user: int | None = Field(default=None, ge=1, le=1000)
 
 
 class AdminRewardOut(BaseModel):

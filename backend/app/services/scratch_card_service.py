@@ -242,6 +242,21 @@ def complete_scratch(db: Session, token: str, meta: ClientMeta) -> ScratchCardOu
     return to_view(card)
 
 
+def record_replay(db: Session, token: str, meta: ClientMeta) -> ScratchCardOut:
+    """A returning participant scratched their finished card again.
+
+    Purely a tracking event: the reward, claim reference and timestamps are untouched.
+    """
+    card = _load(db, token)
+    if card.status == CardStatus.COMPLETED:
+        record_event(
+            db, "card.replayed", meta=meta, campaign_id=card.campaign_id,
+            user_id=card.user_id, scratch_card_id=card.id,
+        )
+        db.commit()
+    return to_view(card, already_completed=card.status == CardStatus.COMPLETED)
+
+
 def _duplicate_completion(db: Session, card: ScratchCard, meta: ClientMeta) -> ScratchCardOut:
     record_event(
         db, "card.duplicate_completion", meta=meta, campaign_id=card.campaign_id,

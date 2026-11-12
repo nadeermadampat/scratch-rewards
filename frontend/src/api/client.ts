@@ -63,6 +63,8 @@ export const api = {
   getCard: (token: string) => request<ScratchCardView>(`/scratch-cards/${encodeURIComponent(token)}`),
   startCard: (token: string) =>
     request<ScratchCardView>(`/scratch-cards/${encodeURIComponent(token)}/start`, post()),
+  replayCard: (token: string) =>
+    request<ScratchCardView>(`/scratch-cards/${encodeURIComponent(token)}/replay`, post()),
   completeCard: (token: string) =>
     request<ScratchCardView>(`/scratch-cards/${encodeURIComponent(token)}/complete`, post()),
 };
@@ -74,7 +76,7 @@ export function adminApi(key: string) {
     overview: (campaignId?: string) =>
       request<AdminOverview>(`/admin/overview${campaignId ? `?campaign_id=${campaignId}` : ""}`, auth()),
     campaigns: () => request<AdminCampaign[]>("/admin/campaigns", auth()),
-    updateCampaign: (id: string, changes: { status?: string }) =>
+    updateCampaign: (id: string, changes: { status?: string; max_cards_per_user?: number }) =>
       request<AdminCampaign>(`/admin/campaigns/${id}`, auth(patch(changes))),
     updateReward: (id: string, changes: { weight?: number; is_active?: boolean }) =>
       request<unknown>(`/admin/rewards/${id}`, auth(patch(changes))),

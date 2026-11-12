@@ -15,32 +15,49 @@ export type Phase =
   | "loading" | "initial" | "scratching" | "partial" | "revealed" | "completed"
   | "expired" | "not_found" | "error";
 
-function phaseFor(card: ScratchCardView): Phase {
-  if (card.status === "completed") return "completed";
-  if (card.status === "expired") return "expired";
-  return "initial";
-}
-
-/** Server-backed state machine for one card. All outcomes come from the API. */
-export function useScratchCard(token: string) {
+/**
+ * Server-backed state machine for one card. All outcomes come from the API.
+ *
+ * A finished card can be *replayed*: the coating comes back and the participant
+ * scratches again to see the same, already-recorded result. Replays change nothing
+ * on the server except a tracking event.
+ */
+export function useScratchCard(token: string, replayOnLoad: boolean) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [card, setCard] = useState<ScratchCardView | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** True only when the reveal happened in this visit (drives confetti and sound). */
   const [revealedNow, setRevealedNow] = useState(false);
+  /** > 0 while (or after) scratching a finished card again; changes on every replay. */
+  const [replayRound, setReplayRound] = useState(0);
   const startRequest = useRef<Promise<ScratchCardView> | null>(null);
   const revealing = useRef(false);
+  const replaying = useRef(false);
+  const replayOnLoadRef = useRef(replayOnLoad);
+
+  const startReplay = useCallback(() => {
+    replaying.current = true;
+    revealing.current = false;
+    setRevealedNow(false);
+    setError(null);
+    setReplayRound((round) => round + 1);
+    setPhase("initial");
+  }, []);
 
   useEffect(() => {
     let alive = true;
     startRequest.current = null;
     revealing.current = false;
+    replaying.current = false;
     setPhase("loading");
     api.getCard(token)
       .then((loaded) => {
         if (!alive) return;
         setCard(loaded);
-        setPhase(phaseFor(loaded));
+        if (loaded.status === "expired") setPhase("expired");
+        else if (loaded.status !== "completed") setPhase("initial");
+        else if (replayOnLoadRef.current) startReplay();
+        else setPhase("completed");
       })
       .catch((e: ApiError) => {
         if (!alive) return;
@@ -50,7 +67,7 @@ export function useScratchCard(token: string) {
     return () => {
       alive = false;
     };
-  }, [token]);
+  }, [token, startReplay]);
 
   const fail = useCallback((e: ApiError) => {
     if (e.code === "CARD_EXPIRED") setPhase("expired");
@@ -77,6 +94,7 @@ export function useScratchCard(token: string) {
   }, [token, fail]);
 
   const beginScratch = useCallback(() => {
+    if (replaying.current) return; // the result is already recorded
     ensureStarted().catch(() => undefined);
   }, [ensureStarted]);
 
@@ -111,12 +129,21 @@ export function useScratchCard(token: string) {
     if (revealing.current) return;
     revealing.current = true;
     setRevealedNow(true);
+    if (replaying.current) {
+      setPhase("completed");
+      api.replayCard(token).catch(() => undefined); // tracking only; never blocks the reveal
+      return;
+    }
     setPhase("revealed");
     void complete();
-  }, [complete]);
+  }, [complete, token]);
 
   /** Accessible alternative to scratching. */
   const revealWithoutScratching = useCallback(async () => {
+    if (replaying.current) {
+      reveal();
+      return;
+    }
     try {
       const started = await ensureStarted();
       if (started.status !== "completed") reveal();
@@ -125,5 +152,8 @@ export function useScratchCard(token: string) {
     }
   }, [ensureStarted, reveal]);
 
-  return { phase, card, error, revealedNow, beginScratch, setStroking, reveal, retrySave: complete, revealWithoutScratching };
+  return {
+    phase, card, error, revealedNow, replayRound,
+    beginScratch, setStroking, reveal, retrySave: complete, revealWithoutScratching, startReplay,
+  };
 }

@@ -112,6 +112,19 @@ def start_scratch(
 
 
 @router.post(
+    "/scratch-cards/{token}/replay",
+    response_model=ApiResponse[ScratchCardOut],
+    dependencies=[Depends(rate_limit("card_write"))],
+    tags=["scratch-cards"],
+)
+def replay_scratch(
+    token: str, db: Session = Depends(get_db), meta: ClientMeta = Depends(get_client_meta)
+):
+    """Record that a finished card was scratched again. The result never changes."""
+    return ok(scratch_card_service.record_replay(db, token, meta))
+
+
+@router.post(
     "/scratch-cards/{token}/complete",
     response_model=ApiResponse[ScratchCardOut],
     dependencies=[Depends(rate_limit("card_write"))],
